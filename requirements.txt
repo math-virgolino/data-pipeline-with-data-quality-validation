@@ -1,0 +1,6 @@
+pandas
+pyodbc
+python-dotenv
+great_expectations
+pandera
+SQLAlchemy
