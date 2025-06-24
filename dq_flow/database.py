@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, Column, Integer, String, Date, Numeric, Text, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Numeric, Date, Text, func
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.sql import func
 import urllib
@@ -87,15 +87,19 @@ class HistoricoCliente(Base):
     data_insercao = Column(DateTime, server_default=func.now())
 
 class PipelineLog(Base):
-    """Modelo para logs de execução do pipeline."""
     __tablename__ = 'pipeline_logs'
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     timestamp = Column(DateTime, default=func.now())
-    etapa = Column(String(100))
-    status = Column(String(50))
+    pipeline_name = Column(String(255), nullable=False, default="N/A")    
+    etapa = Column(String(100), nullable=False)
+    status = Column(String(50), nullable=False)
     mensagem = Column(Text)
     detalhes = Column(Text, nullable=True)
+
+    def __repr__(self):
+        # Atualizando o __repr__ para ser mais informativo
+        return f"<PipelineLog(pipeline='{self.pipeline_name}', etapa='{self.etapa}', status='{self.status}')>"
 
 def create_all_tables():
     """Cria todas as tabelas no banco de dados que não existirem."""
