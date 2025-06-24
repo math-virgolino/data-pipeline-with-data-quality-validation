@@ -8,12 +8,13 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.append(PROJECT_ROOT)
 
-# Importamos os componentes necessários. Note que 'SessionLocal' não é mais usado aqui.
+# Importamos os componentes necessários.
 from dq_flow.database import StageCliente, create_all_tables, Base, engine
 
-def run_setup():
+def run_setup_otimizado():
     """
-    Reseta o banco, carrega dados do CSV e os insere usando SQLAlchemy Core.
+    Reseta o banco, carrega dados do CSV e os insere usando processamento
+    vetorizado do Pandas e SQLAlchemy Core.
     """
     # 1. ETAPA DE PREPARAÇÃO DO BANCO (sem alterações)
     try:
@@ -27,7 +28,13 @@ def run_setup():
 
         print("Etapa: Carregando dados do CSV...")
         csv_path = os.path.join(PROJECT_ROOT, 'data', 'stage_clientes.csv')
-        df_fake = pd.read_csv(csv_path, delimiter=',')
+        df = pd.read_csv(csv_path, delimiter=',')
+        df['data_cadastro'] = pd.to_datetime(df['data_cadastro'], format='%d/%m/%Y', errors='coerce')
+        df['valor_ultima_compra'] = df['valor_ultima_compra'].astype(float)
+        df['id_cliente'] = df['id_cliente'].astype(str)
+        df['nome'] = df['nome'].astype(str)
+        df['email'] = df['email'].astype(str)
+        df['status'] = df['status'].astype(str)
 
     except FileNotFoundError:
         print(f"ERRO: Arquivo não encontrado em '{csv_path}'.")
@@ -36,49 +43,57 @@ def run_setup():
         print(f"ERRO na fase de inicialização do banco: {e}")
         return
 
-    # 2. ETAPA DE PROCESSAMENTO DOS DADOS (adaptada)
-    # Preparamos uma lista de dicionários, em vez de objetos StageCliente.
-    lista_de_dicionarios = []
-    print("Iniciando processamento e conversão dos dados do CSV...")
-    for index, row in df_fake.iterrows():
-        row_data = row.to_dict()
-        try:
-            valor_original = row_data['valor_ultima_compra']
-            valor_decimal = Decimal(str(valor_original)).quantize(
+    # 2. ETAPA DE PROCESSAMENTO VETORIZADO (Otimização Principal)
+    print("Iniciando processamento vetorizado dos dados do DataFrame...")
+    try:
+        # ---- INÍCIO DA OTIMIZAÇÃO ----
+
+        # 2.1. Define uma função para a conversão, garantindo o tratamento de nulos.
+        def converter_para_decimal(valor):
+            if pd.isna(valor):
+                return None  # Mantém valores nulos como None (SQL NULL)
+            # A conversão via string é mais segura para evitar imprecisões de float
+            return Decimal(str(valor)).quantize(
                 Decimal('0.01'), rounding=ROUND_HALF_UP
             )
-            lista_de_dicionarios.append(row_data)
-        except Exception as conversion_error:
-            print(f"ERRO ao converter a linha {index}: {row_data}")
-            print(f"--> Erro específico: {conversion_error}")
-            raise
 
-    # 3. ETAPA DE INSERÇÃO (reescrita com SQLAlchemy Core)
-    # Verificamos se há dados a serem inseridos antes de conectar.
-    if not lista_de_dicionarios:
+        # 2.2. Aplica a função à coluna inteira de uma só vez (vetorização).
+        # Isto é ordens de magnitude mais rápido que um loop for.
+        df['valor_ultima_compra'] = df['valor_ultima_compra'].apply(converter_para_decimal)
+
+        # 2.3. Converte o DataFrame processado para uma lista de dicionários.
+        # Substitui todo o loop `for` anterior por uma única linha.
+        dados_para_inserir = df.to_dict(orient='records')
+
+        # ---- FIM DA OTIMIZAÇÃO ----
+
+    except Exception as e:
+        print(f"ERRO ao processar os dados do DataFrame: {e}")
+        return
+
+    # 3. ETAPA DE INSERÇÃO (código original mantido, pois já é o ideal)
+    if not dados_para_inserir:
         print("Nenhum dado válido para inserir. Finalizando.")
         return
 
-    print(f"Etapa: Iniciando BULK INSERT (via SQLAlchemy Core) de {len(lista_de_dicionarios)} registros...")
+    print(f"Etapa: Iniciando BULK INSERT de {len(dados_para_inserir)} registros...")
     
-    # Usamos uma conexão direta da engine, sem usar a Session do ORM.
-    with engine.connect() as connection:
+    # O bloco `with engine.begin() as connection:` é uma forma idiomática e segura
+    # que inicia uma transação e faz commit ao final, ou rollback em caso de erro.
+    with engine.begin() as connection:
         try:
-            # Pegamos a referência da tabela diretamente do modelo ORM
             tabela = StageCliente.__table__
+            connection.execute(tabela.insert(), dados_para_inserir)
+            print("Etapa: BULK INSERT finalizado e transação commitada.")
             
-            # Executamos o 'insert' em massa passando a lista de dicionários
-            connection.execute(tabela.insert(), lista_de_dicionarios)
-            
-            # Finalizamos a transação com um commit explícito
-            connection.commit()
-            
-            print("Etapa: BULK INSERT (via Core) finalizado com sucesso.")
-            print(f"\nSUCESSO: {len(lista_de_dicionarios)} registros carregados em 'stage_clientes'.")
-        
         except Exception as e:
-            print(f"\nERRO FATAL durante a carga de dados via Core: {e}")
-            # A transação é revertida automaticamente ao sair do bloco 'with' em caso de erro.
+            print(f"\nERRO FATAL durante a carga de dados: {e}")
+            # O rollback é automático ao sair do bloco 'with' com uma exceção.
+            # O 'raise' garante que o erro interrompa o script, sinalizando a falha.
+            raise 
+
+    print(f"\nSUCESSO: {len(dados_para_inserir)} registros carregados em 'stage_clientes'.")
+
 
 if __name__ == "__main__":
-    run_setup()
+    run_setup_otimizado()
