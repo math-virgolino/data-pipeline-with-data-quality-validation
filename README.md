@@ -11,7 +11,7 @@ Este projeto implementa um framework de ETL (Extract, Transform, Load) e Data Qu
 - **python-dotenv**: Gerenciamento de variáveis de ambiente e configurações.
 
 ### Estrutura do Projeto
-
+```
 dq_flow_project/
 ├── .venv/
 ├── data/
@@ -31,7 +31,7 @@ dq_flow_project/
 ├── .gitignore
 ├── main.py                     # Ponto de entrada para executar o pipeline de clientes
 └── pyproject.toml              # Arquivo de configuração do Poetry
-
+```
 ---
 
 ## 1. Escopo e Arquitetura
@@ -152,7 +152,7 @@ class HistoricoProduto(Base):
     nome_produto = Column(String(255))
     preco = Column(Numeric(10, 2))
     # ... outras colunas
-
+```
 #### Passo 2: Crie o Schema de Validação em `validation.py`
 Defina um novo schema `pandera` com as regras de qualidade para os dados de produtos.
 
