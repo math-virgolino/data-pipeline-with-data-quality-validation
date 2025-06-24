@@ -23,7 +23,6 @@ dq_flow_project/
 │   ├── logger.py               # Configuração do logger para console e DB
 │   ├── validation.py           # Schemas de validação do Pandera
 │   └── pipeline.py             # (Opcional, se a lógica for movida para cá)
-├── great_expectations/         # (Opcional, se o framework for adicionado)
 ├── scripts/
 │   ├── generate_fake_data.py   # Script para gerar dados fictícios
 │   └── setup_database.py       # Script para criar/resetar as tabelas no DB
